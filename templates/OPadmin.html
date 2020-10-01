@@ -20,12 +20,11 @@
         </ul>
 
         <ul class="sidebar-panel nav">
-            <li class="sidetitle">策划部</li>
-            <li><a href="#"><span class="icon color15"><i class="fa fa-cubes"></i></span>Event
-                Dashboard<span class="caret"></span></a>
+            <li class="sidetitle">运营支持部</li>
+            <li><a href="#"><span class="icon color15"><i class="fa fa-cc-visa"></i></span>活动采购清单<span class="caret"></span></a>
                 <ul>
                     {% for item in events %}
-                        <li><a href="{{ url_for("event_dashboard",id=item[0]) }}">{{ item[1] }}</a></li>
+                        <li><a href="{{ url_for("event_needs_op_page",id=item[0]) }}">{{ item[1] }}</a></li>
                     {% endfor %}
                 </ul>
             </li>

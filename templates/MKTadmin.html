@@ -20,18 +20,14 @@
         </ul>
 
         <ul class="sidebar-panel nav">
-            <li class="sidetitle">策划部</li>
-            <li><a href="#"><span class="icon color15"><i class="fa fa-cubes"></i></span>Event
-                Dashboard<span class="caret"></span></a>
-                <ul>
-                    {% for item in events %}
-                        <li><a href="{{ url_for("event_dashboard",id=item[0]) }}">{{ item[1] }}</a></li>
-                    {% endfor %}
-                </ul>
+            <li class="sidetitle">市场部</li>
+            <li><a href="{{ url_for('article') }}"><span class="icon color15"><i class="fa fa-weixin"></i></span>Wechat Article | 公众号推文</a>
             </li>
+            <li><a href="{{ url_for('MKTperformance') }}"><span class="icon color15"><i class="fa fa-line-chart"></i></span>Performance | 绩效</a>
             </li>
 
         </ul>
+
 
     </div>
 {% endblock %}

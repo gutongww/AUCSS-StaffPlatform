@@ -4,6 +4,10 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from config import db
 from meeting import *
 from sponsor import *
+from event import *
+from notification import *
+from time_covert import *
+from article import *
 import random
 import config
 from leave import *
@@ -12,32 +16,56 @@ app = Flask(__name__)
 
 app.config.from_object(config)
 
+'''
+代码库说明：
+app.py ==> 网页框架以及所有route.
+config.py ==> 数据库配置.
+event.py ==> 所有活动有关的function.
+leave.py ==> 所有请假有关的function.
+meeting.py ==> 所有会议有关的function.
+sponsor.py ==> 所有商家数据库有关的function.
+signup.py ==> 所有活动报名有关的function.
+test.py ==> 测试使用.
+
++-----Templates：
+      储存所有html file
++-----static：
+      储存所有静态文件--> 图片, css, javascript脚本
+
+
+版本记录：
+V0.0.1 Init Web------------
+开发者：Zach Wang
+策划人员：Dougie Feng, Zach Wang
+测试人员：Dougie Feng, Hanzheng Wang (China status), William Wu, Ariel Wu
+'''
+
 
 # App init====================================================================================================
 @app.route('/', methods=['POST'])
 def login_page():
-        email = request.form.get('email')
-        password = request.form.get('password')
-        if not all([email, password]):
-            flash("Please fill in the information completely！")
-        try:
-            cur = db.cursor()
-            sql = "select password from user where email = '%s'" % email
-            db.ping(reconnect=True)
-            cur.execute(sql)
-            result = cur.fetchone()
-            if result is None:
-                flash("User does not exist！")
-                return render_template('index.html')
-            if check_password_hash(result[0], password):
-                session['email'] = email
-                session.permanent = True
-                return dashbord()
-            else:
-                flash("Incorrect password!")
-                return render_template('index.html')
-        except Exception as e:
-            raise e
+    email = request.form.get('email')
+    password = request.form.get('password')
+    if not all([email, password]):
+        flash("Please fill in the information completely！")
+    try:
+        cur = db.cursor()
+        sql = "select password from user where email = '%s'" % email
+        db.ping(reconnect=True)
+        cur.execute(sql)
+        result = cur.fetchone()
+        if result is None:
+            flash("User does not exist！")
+            return render_template('index.html')
+        if check_password_hash(result[0], password):
+            session['email'] = email
+            session.permanent = True
+            return dashbord()
+        else:
+            flash("Incorrect password!")
+            return render_template('index.html')
+    except Exception as e:
+        raise e
 
 
 # Login status maintained
@@ -61,11 +89,12 @@ def login_status():
     # If email information does not exist, no login, return empty
     return {}
 
-@app.route('/register',methods=['GET','POST'])
+
+@app.route('/register', methods=['GET', 'POST'])
 def register():
-    if request.method=='GET':
+    if request.method == 'GET':
         return render_template('register.html')
-    elif request.method=='POST':
+    elif request.method == 'POST':
         name = request.form.get('name')
         email = request.form.get('email')
         password_1 = request.form.get('password_1')
@@ -132,23 +161,27 @@ def register():
             raise e
 
 
-
 @app.route('/', methods=['GET'])
 def dashbord():
     login_ = login_status()
     if len(login_) == 0:
         return render_template('index.html')
     else:
-        meetings = list_meeting_of_user(login_['email'])
+        meetings = list_all_meetings()
+        notification = fetch_all_notification_from_db()
         data = [login_['name'], meetings, str(len(meetings))]  # data=[0=email,1=meetings,2=len(meetings)]
         if login_['type'] == 1:  # Category 1: General Staff
             return render_template('backend.html', user_name=data[0], issue_information=data)
         if login_['type'] == 2:  # Category 2: HR Staff
-            return hr(data)
+            return hr(data, notification)
         if login_['type'] == 3:  # Category 3: PR Staff
-            return pr(data)
+            return pr(data, notification)
         if login_['type'] == 4:  # Category 4: EP Staff
-            return ep(data)
+            return ep(data, notification)
+        if login_['type'] == 5:  # Category 4: EP Staff
+            return mkt(data, notification)
+        if login_['type'] == 6:  # Category 4: OP Staff
+            return op(data, notification)
 
 
 @app.route('/logout')
@@ -180,22 +213,31 @@ def meeting_leave():
     if request.method == 'GET':
         info = ''
         info1 = ''
-        meetings = list_meeting_of_user(login_['email'])
+        meetings = list_all_meetings()
         if len(meetings) == 0:
             info = "You don't have meetings at the moment where you can ask for leave."
         all_leaves = list_leave_apply_of_user(login_['email'])
         if len(all_leaves) == 0:
             info1 = "You haven't asked for leave yet!"
 
-        if login_['type']==2:
+        if login_['type'] == 2:
             return render_template('MeetingLeave.html', info=info, info1=info1, meetings=meetings, leaves=all_leaves,
                                    user_name=login_['name'])
-        elif login_['type']==3:
+        elif login_['type'] == 3:
             return render_template('MeetingLeavePR.html', info=info, info1=info1, meetings=meetings, leaves=all_leaves,
                                    user_name=login_['name'])
-        elif login_['type']==4:
+        elif login_['type'] == 4:
+            all_event = fetch_all_event_id_from_database()
             return render_template('MeetingLeaveEP.html', info=info, info1=info1, meetings=meetings, leaves=all_leaves,
-                                   user_name=login_['name'])
+                                   user_name=login_['name'], events=all_event)
+        elif login_['type'] == 5:
+            all_event = fetch_all_event_id_from_database()
+            return render_template('MeetingLeaveMKT.html', info=info, info1=info1, meetings=meetings, leaves=all_leaves,
+                                   user_name=login_['name'], events=all_event)
+        elif login_['type'] == 6:
+            all_event = fetch_all_event_id_from_database()
+            return render_template('MeetingLeaveOP.html', info=info, info1=info1, meetings=meetings, leaves=all_leaves,
+                                   user_name=login_['name'], events=all_event)
 
 
 @app.route('/meetingleave', methods=['POST'])
@@ -212,11 +254,11 @@ def apply_for_leave():
 
 # Page for department of HR ====================================================================================
 @app.route('/hr')
-def hr(issu):
+def hr(issu, notification):
     login_ = login_status()
     if len(login_) == 0:
         return redirect(url_for(('dashbord')))
-    return render_template('HRadmin.html', user_name=issu[0], issue_information=issu)
+    return render_template('HRadmin.html', user_name=issu[0], issue_information=issu, notification=notification)
 
 
 @app.route('/meetings', methods=['GET'])
@@ -237,18 +279,12 @@ def add_meeting():
         return redirect(url_for(('dashbord')))
     location = request.form.get('location')
     title = request.form.get('title')
-    date = request.form.get('date').split("-")
     time = request.form.get('time')
-    id = int(str(date[2] + date[1] + date[0]) + str(random.randrange(100, 999)))
-    meeting_ids = get_all_meeting_id()
-    while id in meeting_ids:
-        id = int(date.replace('-', '') + str(random.randrange(100, 999)))
-    datatime = date[2] + "-" + date[1] + "-" + date[0] + " " + time + ":00"
-    sql = "INSERT INTO meeting(meeting_id,meeting_title,meeting_location,meeting_date) " \
-          "VALUES (%s,'%s','%s','%s')" % (id, title, location, datatime)
+    datatime = html_format_TO_mysql_format(time)
+    sql = "INSERT INTO meeting(meeting_title,meeting_location,meeting_date) " \
+          "VALUES ('%s','%s','%s')" % (title, location, datatime)
 
     edit_meeting_to_database(sql)
-    add_all_staff_to_meeting(id)
     return redirect(url_for(('manag_meeting')))
 
 
@@ -267,21 +303,20 @@ def edit_meeting(mid):
             title = meeting[0][1]
             location = meeting[0][2]
             datetime = meeting[0][3]
-            date = datetime.strftime("%x")
-            time = datetime.strftime("%X")[:-3]
+            datetime = datetime_format_TO_html_format(datetime)
+            print(date)
             return render_template('EditMeeting.html', user_name=login_['name'], mid=mid, title=title,
-                                   location=location, date=date, time=time)
+                                   location=location, time=datetime)
         except Exception as e:
             raise e
     elif request.method == 'POST':
         try:
             location = request.form.get('location')
             title = request.form.get('title')
-            date = request.form.get('date').split("/")
             time = request.form.get('time')
-            datatime = "20" + date[2] + "-" + date[1] + "-" + date[0] + " " + time + "00"
+            datetime = html_format_TO_mysql_format(time)
             sql = "update meeting set meeting_title='%s',meeting_location='%s',meeting_date='%s' where meeting_id=%s" % (
-                title, location, datatime, mid)
+                title, location, datetime, mid)
             edit_meeting_to_database(sql)
             return manag_meeting()
         except Exception as e:
@@ -301,7 +336,7 @@ def manage_leave():
     if len(login_) == 0:
         return redirect(url_for(('dashbord')))
     all_leaves = list_all_leave_requests()
-    leaves_record=list_all_records()
+    leaves_record = list_all_records()
     return render_template('ManageLeave.html', user_name=login_['name'], leaves=all_leaves, leaves_record=leaves_record)
 
 
@@ -320,51 +355,94 @@ def approve_leave(mid, email):
     if len(login_) == 0:
         return redirect((url_for('dashbord')))
     approve_status(mid, email)
-    processor=login_['name']
-    add_leave_to_leave_history(mid,email,processor)
-    return redirect(url_for('manage_leave',))
+    processor = login_['name']
+    add_leave_to_leave_history(mid, email, processor)
+    return redirect(url_for('manage_leave', ))
 
 
-# Page for department of PR ====================================================================================
-@app.route('/pr',methods=['GET'])
-def pr(issu):
+@app.route('/notification', methods=['GET', 'POST'])
+def notification():
+    login_ = login_status()
+    if len(login_) == 0:
+        return redirect((url_for('dashbord')))
+    if request.method == 'GET':
+        all_notifi = fetch_all_notification_from_db()
+        return render_template('Notification.html', user_name=login_['name'], all_notifi=all_notifi)
+    elif request.method == 'POST':
+        title = request.form.get('title')
+        message = request.form.get('message')
+        sender = '人力资源部'
+        add_notification_to_db(title, message, sender, login_['name'])
+        return redirect(url_for('notification'))
+
+
+@app.route('/recallid<id>')
+def recall_notice(id):
+    login_ = login_status()
+    if len(login_) == 0:
+        return redirect((url_for('dashbord')))
+    mark_not_show_to_db(id)
+    return redirect(url_for('notification'))
+
+
+@app.route('/HREventSignupInfo')
+def event_signup_info():
+    login_ = login_status()
+    if len(login_) == 0:
+        return redirect(url_for('dashbord'))
+    else:
+        events = fetch_all_event_id_from_database()
+        all_member = classification_of_event(events)
+        return render_template('HREventSignUpInfo.html', user_name=login_['name'], events=events, all_member=all_member)
+
+
+'''
+ Page for department of PR ====================================================================================
+'''
+
+
+@app.route('/pr', methods=['GET'])
+def pr(issu, notification):
     login_ = login_status()
     if len(login_) == 0:
         return redirect(url_for(('dashbord')))
 
-    return render_template('PRadmin.html', user_name=login_['name'],issue_information=issu)
+    return render_template('PRadmin.html', user_name=login_['name'], issue_information=issu, notification=notification)
 
-@app.route('/sponsordatabase',methods=['GET','POST'])
+
+@app.route('/sponsordatabase', methods=['GET', 'POST'])
 def sponsor_database():
     login_ = login_status()
     if len(login_) == 0:
         return redirect(url_for(('dashbord')))
-    if request.method=='GET':
-        sponsors=list_all_sponsors()
-        return render_template('SponsorsDatabase.html',user_name=login_['name'],sponsors=sponsors)
+    if request.method == 'GET':
+        sponsors = list_all_sponsors()
+        return render_template('SponsorsDatabase.html', user_name=login_['name'], sponsors=sponsors)
 
-    if request.method=='POST':
-        sponsor_name=request.form.get('sponsor_name')
-        sponsor_add=request.form.get('sponsor_add')
-        contact_name=request.form.get('contact_name')
-        contact=request.form.get('contact')
-        contact_type=request.form.get('contact_type')
-        staff=request.form.get('staff')
-        sponsor_comment=request.form.get('sponsor_comment')
-        sql="INSERT INTO sponsors (sponsor_name,sponsor_add,contact_name,contact,contact_type,staff,sponsor_comment)" \
-            "VALUES ('%s','%s','%s','%s','%s','%s','%s')"%(sponsor_name,sponsor_add,contact_name,contact,contact_type,staff,sponsor_comment)
+    if request.method == 'POST':
+        sponsor_name = request.form.get('sponsor_name')
+        sponsor_add = request.form.get('sponsor_add')
+        contact_name = request.form.get('contact_name')
+        contact = request.form.get('contact')
+        contact_type = request.form.get('contact_type')
+        staff = request.form.get('staff')
+        sponsor_comment = request.form.get('sponsor_comment')
+        sql = "INSERT INTO sponsors (sponsor_name,sponsor_add,contact_name,contact,contact_type,staff,sponsor_comment)" \
+              "VALUES ('%s','%s','%s','%s','%s','%s','%s')" % (
+                  sponsor_name, sponsor_add, contact_name, contact, contact_type, staff, sponsor_comment)
         add_sponsor(sql)
         return redirect(url_for('sponsor_database'))
 
-@app.route('/editsponsorsid<sid>',methods=['GET','POST'])
+
+@app.route('/editsponsorsid<sid>', methods=['GET', 'POST'])
 def edit_sponsor(sid):
     login_ = login_status()
     if len(login_) == 0:
         return redirect(url_for(('dashbord')))
-    if request.method=='GET':
-        that_sponsor=get_sponsor(sid)
-        return render_template('EditSponsor.html',user_name=login_['name'],sponsor=that_sponsor)
-    elif request.method=='POST':
+    if request.method == 'GET':
+        that_sponsor = get_sponsor(sid)
+        return render_template('EditSponsor.html', user_name=login_['name'], sponsor=that_sponsor)
+    elif request.method == 'POST':
         try:
             sponsor_name = request.form.get('sponsor_name')
             sponsor_add = request.form.get('sponsor_add')
@@ -376,15 +454,14 @@ def edit_sponsor(sid):
             sql = "UPDATE sponsors " \
                   "SET sponsor_name='%s',sponsor_add='%s',contact_name='%s',contact='%s',contact_type='%s',staff='%s',sponsor_comment='%s'" \
                   "WHERE sponsor_id=%s" % (
-                  sponsor_name, sponsor_add, contact_name, contact, contact_type, staff, sponsor_comment, sid)
+                      sponsor_name, sponsor_add, contact_name, contact, contact_type, staff, sponsor_comment, sid)
             add_sponsor(sql)
             return redirect(url_for("sponsor_database"))
         except Exception as e:
             raise e
 
 
-
-@app.route('/deletesponsor<sid>',methods=['GET'])
+@app.route('/deletesponsor<sid>', methods=['GET'])
 def delete_sponsor(sid):
     sql = 'delete from sponsors where sponsor_id=%s' % sid
     add_sponsor(sql)
@@ -392,26 +469,256 @@ def delete_sponsor(sid):
 
 
 # Page for department of EP ====================================================================================
-@app.route('/ep',methods=['GET'])
-def ep(issu):
+@app.route('/ep', methods=['GET'])
+def ep(issu, notification):
     login_ = login_status()
     if len(login_) == 0:
         return redirect(url_for(('dashbord')))
+    all_event = fetch_all_event_id_from_database()
 
-    return render_template('EPadmin.html', user_name=login_['name'],issue_information=issu)
+    return render_template('EPadmin.html', user_name=login_['name'], issue_information=issu, events=all_event,
+                           notification=notification)
 
 
-@app.route('/EventDashboard',methods=['GET'])
-def event_dashboard():
+@app.route('/EventDashboard-id=<id>', methods=['GET', 'POST'])
+def event_dashboard(id):
     login_ = login_status()
     if len(login_) == 0:
         return redirect(url_for(('dashbord')))
-    return render_template('EventDashboard.html',user_name=login_['name'])
+    if request.method == 'GET':
+        all_event = fetch_all_event_id_from_database()
+        event = get_event(id)
+        member = get_all_member_sign_for_the_event(id)
+
+        return render_template('EventDashboard.html', user_name=login_['name'], events=all_event, event=event,
+                               count=len(member))
+    elif request.method == 'POST':
+        title = request.form.get('title')
+        target = request.form.get('targetMember')
+        date = request.form.get('date')
+        time = request.form.get('time')
+        update_event(id, title, target, time, date)
+        return redirect(url_for('event_dashboard', id=id))
 
 
-@app.route('/test')
-def test():
-    return render_template('EventSignUpFinished.html',name='Zach')
+@app.route('/SignUpManage=id=<id>', methods=['GET'])
+def sign_up_manage(id):
+    login_ = login_status()
+    if len(login_) == 0:
+        return redirect(url_for(('dashbord')))
+    all_event = fetch_all_event_id_from_database()
+    event = get_event(id)
+    if event[4] == 'NOT_START':
+        return render_template('EventSignUpManageEP.html', user_name=login_['name'], events=all_event, event=event)
+    elif event[4] == 'STARTED':
+        member = get_all_member_sign_for_the_event(id)
+        return render_template('EventSignUpManageStatsEP.html', user_name=login_['name'], events=all_event, event=event,
+                               member=member, count=len(member))
+
+
+@app.route('/SingUpManage/startid<id>')
+def start_sign_up(id):
+    login_ = login_status()
+    if len(login_) == 0:
+        return redirect(url_for(('dashbord')))
+    sign_up_start(id)
+    return redirect(url_for('sign_up_manage', id=id))
+
+
+@app.route('/SingUpManage/endid<id>')
+def end_sign_up(id):
+    login_ = login_status()
+    if len(login_) == 0:
+        return redirect(url_for(('dashbord')))
+    sign_up_end(id)
+    return redirect(url_for('sign_up_manage', id=id))
+
+
+@app.route('/EventSignUpid<id>', methods=['GET', 'POST'])
+def sign_up(id):
+    if request.method == 'GET':
+        event = get_event(id)
+        if event[4] == 'NOT_START':
+            return render_template('EventSignUp404.html')
+        else:
+            return render_template('EventSignUp.html', event=event[1])
+
+    if request.method == 'POST':
+        name = request.form.get('name')
+        email = request.form.get('email')
+        wechat = request.form.get('wx')
+        contact = request.form.get('contact')
+        sign_up_to_database(id, name, email, wechat, contact)
+        return render_template('EventSignUpFinished.html', name=name)
+
+
+@app.route('/EventNeedsId<id>', methods=['GET', 'POST'])
+def event_needs(id):
+    login_ = login_status()
+    if len(login_) == 0:
+        return redirect(url_for(('dashbord')))
+    event = get_event(id)
+    all_event = fetch_all_event_id_from_database()
+    if request.method == 'GET':
+        all_items = get_unsent_items(id)
+        sent_items = get_sent_items(id)
+        return render_template('EventNeedList.html', events=all_event, event=event, items=all_items,
+                               sent_items=sent_items)
+    if request.method == 'POST':
+        item = request.form.get('item')
+        qty = request.form.get('qty')
+        comment = request.form.get('comment')
+        add_need_item(id, item, qty, comment)
+        return redirect(url_for('event_needs', id=id))
+
+
+@app.route('/DelectNeedsItem<eventid>/<id>')
+def del_item(eventid, id):
+    login_ = login_status()
+    if len(login_) == 0:
+        return redirect(url_for(('dashbord')))
+    remove_item_from_db(id)
+    return redirect(url_for('event_needs', id=eventid))
+
+
+@app.route('/sentitemid<id>')
+def sent_item(id):
+    login_ = login_status()
+    if len(login_) == 0:
+        return redirect(url_for(('dashbord')))
+    change_sent_status(id)
+    return redirect(url_for('event_needs', id=id))
+
+
+# Page for department of OP 运营支持部====================================================================================
+@app.route('/op', methods=['GET'])
+def op(issu, notification):
+    login_ = login_status()
+    if len(login_) == 0:
+        return redirect(url_for(('dashbord')))
+    all_event = fetch_all_event_id_from_database()
+
+    return render_template('OPadmin.html', user_name=login_['name'], issue_information=issu, events=all_event,
+                           notification=notification)
+
+
+@app.route('/eventNeedslistid<id>')
+def event_needs_op_page(id):
+    login_ = login_status()
+    if len(login_) == 0:
+        return redirect(url_for(('dashbord')))
+    all_event = fetch_all_event_id_from_database()
+    event = get_event(id)
+    need = get_sent_items_not_buy(id)
+    bought = get_sent_items_have_bought(id)
+    return render_template('OPEventNeedsList.html', user_name=login_['name'], events=all_event, event=event, need=need,
+                           bought=bought)
+
+
+@app.route('/boughtitem<id>/<eid>')
+def complete_buy(id, eid):
+    login_ = login_status()
+    if len(login_) == 0:
+        return redirect(url_for(('dashbord')))
+    finish_buy_item(id, login_['name'])
+    return redirect(url_for('event_needs_op_page', id=eid))
+
+
+'''
+ Page for department of MKT 市场部===================================================================================================================
+'''
+
+
+@app.route('/mkt', methods=['GET'])
+def mkt(issu, notification):
+    login_ = login_status()
+    if len(login_) == 0:
+        return redirect(url_for('dashbord'))
+    all_event = fetch_all_event_id_from_database()
+
+    return render_template('MKTadmin.html', user_name=login_['name'], issue_information=issu,
+                           notification=notification)
+
+
+@app.route('/WechatArticle', methods=['GET'])
+def article():
+    login_ = login_status()
+    if len(login_) == 0:
+        return redirect(url_for('dashbord'))
+    articles = fetch_all_article()
+    works = get_works_list(articles)
+    tasks = get_task_list(login_['email'], articles)
+    return render_template('MKTArticle.html', user_name=login_['name'], articles=articles, works=works, tasks=tasks)
+
+
+@app.route('/finishtask<taskid>/<articleid>/<type>')
+def finish_aticle_task(taskid, articleid, type):
+    login_ = login_status()
+    if len(login_) == 0:
+        return redirect(url_for('dashbord'))
+    finish_task_in_db(taskid, articleid, type)
+    # print(taskid, articleid, type)
+    return redirect(url_for('article'))
+
+
+@app.route('/AddAriticle', methods=['GET', 'POST'])
+def add_article():
+    login_ = login_status()
+    if len(login_) == 0:
+        return redirect(url_for('dashbord'))
+    if request.method == 'GET':
+        mkt_staffs = fetch_all_mkt_staff()
+        return render_template('MKTAddNewArticle.html', user_name=login_['name'], staffs=mkt_staffs)
+    elif request.method == 'POST':
+        title = request.form.get('title')
+        due_date = html_format_TO_mysql_format(request.form.get('due_date'))
+        banner_duedate = html_format_TO_mysql_format(request.form.get('banner_duedate'))
+        banner_staff = request.form.get('banner_staff')
+        text_duedate = html_format_TO_mysql_format(request.form.get('text_duedate'))
+        text_staff = request.form.get('text_staff')
+        style_duedate = html_format_TO_mysql_format(request.form.get('style_duedate'))
+        style_staff = request.form.get('style_staff')
+
+        add_article_to_db(title, due_date)
+        id = get_article_id(title)[0]
+        add_works_to_db(id, 1, banner_staff, banner_duedate)
+        add_works_to_db(id, 2, text_staff, text_duedate)
+        add_works_to_db(id, 3, style_staff, style_duedate)
+        return redirect(url_for('article'))
+
+
+@app.route('/MKTperformance',methods=['GET'])
+def MKTperformance():
+    login_ = login_status()
+    if len(login_) == 0:
+        return redirect(url_for('dashbord'))
+    performance_list=count_performance()
+    return render_template('MKTperformance.html',performances=performance_list)
+
+
 
 if __name__ == '__main__':
     app.run()
+
+'''
+BUG反馈===================================================================================================================
+'''
+
+
+@app.route('/bugfeedback', methods=['GET', 'POST'])
+def bug_feedback():
+    if request.method == 'GET':
+        return render_template('BugFeedback.html')
+    elif request.method == 'POST':
+        name = request.form.get('name')
+        feedback = request.form.get('feedback')
+        try:
+            cur = db.cursor()
+            sql = "INSERT INTO feedback(name,feedback) VALUES ('%s','%s')" % (name, pymysql.escape_string(feedback))
+            db.ping(reconnect=True)
+            cur.execute(sql)
+            db.commit()
+            cur.close()
+            return redirect(url_for('dashbord'))
+        except Exception as e:
+            print(e)
